@@ -1,17 +1,21 @@
-
 import pandas as pd
-import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 import gradio as gr
 
-# Load and clean dataset
+# ------------------------
+# Load and prepare dataset
+# ------------------------
 df = pd.read_csv("Training.csv")
+
+# Drop unnamed columns if present
 df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+
+# Fill missing values
 df = df.fillna(0)
 
-# Prepare features and labels
-X = df.drop(["prognosis"], axis=1)
+# Features and labels
+X = df.drop("prognosis", axis=1)
 y = df["prognosis"]
 
 # Encode labels
@@ -19,32 +23,39 @@ le = LabelEncoder()
 y_encoded = le.fit_transform(y)
 
 # Train model
-model = RandomForestClassifier(n_estimators=150, random_state=42)
+model = RandomForestClassifier(n_estimators=50, random_state=42)
 model.fit(X, y_encoded)
 
+# Prepare list of all symptoms for CheckboxGroup
+symptoms_list = list(X.columns)
+
+# ------------------------
 # Prediction function
-def predict_disease(symptoms):
-    symptoms = [s.strip().lower().replace(" ", "_") for s in symptoms.split(",")]
-    input_data = [0] * len(X.columns)
-    for symptom in symptoms:
-        if symptom in X.columns:
-            input_data[X.columns.get_loc(symptom)] = 1
+# ------------------------
+def predict_disease(selected_symptoms):
+    input_data = [1 if symptom in selected_symptoms else 0 for symptom in X.columns]
     prediction = model.predict([input_data])[0]
-    disease_name = le.inverse_transform([prediction])[0]
-    return f"🩺 Predicted Disease: {disease_name}"
+    return f"🩺 Predicted Disease: {le.inverse_transform([prediction])[0]}"
 
-# Gradio Interface
-demo = gr.Interface(
-    fn=predict_disease,
-    inputs=gr.Textbox(label="Enter symptoms (comma separated)", placeholder="e.g. fever, cough, fatigue"),
-    outputs=gr.Textbox(label="Predicted Disease"),
-    title="AI Health Symptom Checker 🧬",
-    description="Enter your symptoms to get an AI-based possible diagnosis. (Educational use only)",
-    examples=[
-        ["fever, cough, fatigue"],
-        ["itching, skin_rash, nodal_skin_eruptions"],
-        ["chest_pain, fast_heart_rate, breathlessness"]
-    ]
-)
+# ------------------------
+# Gradio interface
+# ------------------------
+if __name__ == "__main__":
+    # Automatically create valid examples from dataset columns
+    auto_examples = []
+    for col in symptoms_list[:10]:  # take first 10 symptoms for examples
+        auto_examples.append([col])
 
-demo.launch()
+    demo = gr.Interface(
+        fn=predict_disease,
+        inputs=gr.CheckboxGroup(
+            choices=symptoms_list,
+            label="Select your symptoms",
+        ),
+        outputs=gr.Textbox(label="Predicted Disease"),
+        title="AI Health Symptom Checker 🧬",
+        description="Select your symptoms to get an AI-based possible diagnosis. (Educational use only)",
+        examples=auto_examples,
+        flagging_mode="never"  # updated for Gradio >=3.40
+    )
+    demo.launch()
